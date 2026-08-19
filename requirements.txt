@@ -1,0 +1,15 @@
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+seaborn>=0.12
+adjustText>=1.0
+openpyxl>=3.1
+requests>=2.31
+beautifulsoup4>=4.12
+GEOparse>=2.0.3
+mygene>=3.2
+tqdm>=4.65
+PyYAML>=6.0
+Pillow>=10.0
+pytest>=7.4
