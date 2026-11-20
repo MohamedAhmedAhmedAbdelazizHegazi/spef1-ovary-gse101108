@@ -25,8 +25,10 @@ GSE_ID = "GSE101108"
 HISTOTYPE_ORDER = ["Serous", "Clear cell", "Endometrioid", "Mucinous"]
 
 #: Detection threshold (raw counts) that defines a sample as
-#: "SPEF1-positive". Chosen a priori: 5 reads is the minimum for which the
-#: segnale/rumore di htseq-count su librerie da ~6 M read e' accettabile.
+#: "SPEF1-positive". Chosen a priori: at the median library size of the cohort
+#: (~6 M assigned reads) 5 reads are ~0.8 counts per million, and a gene with an
+#: expected count of one read reaches 5 reads in only ~0.4% of libraries
+#: (Poisson). ``threshold_rationale`` in ``src/analyses.py`` recomputes both.
 DETECTION_THRESHOLD = 5
 
 #: Soglie usate nelle analisi di sensibilita'.
@@ -79,11 +81,18 @@ MANUSCRIPT_GEPIA_GENES = {
     "RSPH1": ["RSPH1"],
 }
 
-#: SPEF1 interactors reported in the manuscript (GeneMANIA/STRING).
-MANUSCRIPT_INTERACTOME = [
-    "MAPRE1", "MAPRE3", "CFAP70", "SPAG16", "TSSK4", "SPEF2",
-    "EFHC1", "SPAG6", "HYDIN", "ODF2", "SPATA4",
+#: The twenty highest-confidence STRING v12.0 interactors of SPEF1 (manuscript
+#: Table 1). Their co-expression with SPEF1 is read from the transcriptome-wide
+#: table, so an interactor below the expression filter is reported as such.
+STRING_INTERACTORS = [
+    "C17orf107", "CFAP70", "CNN1", "EFHC1", "HYDIN", "MAPRE1", "MAPRE3",
+    "MATN4", "ODF2", "RASL11B", "SMOX", "SPAG16", "SPAG6", "SPATA4", "SPEF2",
+    "TEX26", "TSNAXIP1", "TSSK4", "VMO1", "ZNF567",
 ]
+
+#: Genes summarized by histotype: SPEF2 (possible antibody cross-reactivity)
+#: and the intestinal markers that characterize the mucinous tumours.
+HISTOTYPE_CONTEXT_GENES = ["SPEF2", "MUC2", "CDX2", "FOXJ1"]
 
 #: Other cancer-testis antigens mentioned in the manuscript.
 CANCER_TESTIS_ANTIGENS = ["SPA17", "SPAG17", "MAGEA1", "MAGEA4", "CTAG1B", "PRAME", "TEX19"]
@@ -93,7 +102,10 @@ IMMUNE_CHECKPOINTS = ["CD274", "CTLA4", "LAG3", "PDCD1", "TIGIT", "HAVCR2", "PDC
 
 #: Marker signatures for the estimation of immune infiltration.
 #: This is NOT a deconvolution: it is a marker-based score (mean of the
-#: marker z-scores), declared as such in the Methods.
+#: marker z-scores of log2(median-of-ratios + 1) values), declared as such in
+#: the Methods. No background correction is applied (it has no counterpart for
+#: read counts). MRC1 and PIFO are not retrieved in the annotated GSE101108
+#: matrix and are dropped; the composition sheet of the workbook lists them.
 IMMUNE_SIGNATURES: dict[str, list[str]] = {
     "B cells": ["CD19", "MS4A1", "CD79A", "CD79B", "BLNK"],
     "CD8+ T cells": ["CD8A", "CD8B", "GZMK", "CD3D", "CD3E"],

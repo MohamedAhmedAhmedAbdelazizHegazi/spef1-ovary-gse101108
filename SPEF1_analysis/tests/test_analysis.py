@@ -217,3 +217,55 @@ def test_signature_scores_are_centred():
     assert scores.shape == (3, 1)
     assert scores["Macrophages"].mean() == pytest.approx(0.0, abs=1e-9)
     assert composition.iloc[0]["n_markers_found"] == 2
+
+
+# --------------------------------------------------------------------------- #
+# Revision analyses                                                            #
+# --------------------------------------------------------------------------- #
+
+
+def test_threshold_rationale_cpm_poisson_and_auc():
+    samples = [f"S{i}" for i in range(6)]
+    raw = pd.Series([0, 1, 2, 6, 8, 12], index=samples)
+    library = pd.Series([5e6] * 6, index=samples)
+    # the reference score rises with the target, so every cut-off separates it perfectly
+    score = pd.Series([-1.0, -0.8, -0.5, 0.5, 0.9, 1.2], index=samples)
+    table = analyses.threshold_rationale(raw, library, score, [1, 5])
+    five = table[table["threshold_counts"] == 5].iloc[0]
+    assert five["n_positive"] == 3
+    assert five["cpm_at_median_library"] == pytest.approx(1.0)
+    assert five["poisson_p_ge_threshold_if_lambda1"] == pytest.approx(0.00366, abs=1e-5)
+    assert five["ciliated_score_auc"] == pytest.approx(1.0)
+
+
+def test_interactor_coexpression_flags_filtered_genes():
+    coexpression = pd.DataFrame(
+        {"rho": [0.6, 0.1], "q_value_BH": [0.001, 0.8]}, index=["CFAP70", "CNN1"]
+    )
+    full_index = pd.Index(["CFAP70", "CNN1", "SPAG6", "SPEF1"])
+    table = analyses.interactor_coexpression(
+        coexpression, full_index, ["CFAP70", "CNN1", "SPAG6", "NOT_THERE"]
+    ).set_index("interactor")
+    assert bool(table.loc["CFAP70", "significant"]) is True
+    assert bool(table.loc["CNN1", "significant"]) is False
+    # SPAG6 is in the matrix but below the expression filter
+    assert bool(table.loc["SPAG6", "in_matrix"]) is True
+    assert bool(table.loc["SPAG6", "passes_expression_filter"]) is False
+    assert bool(table.loc["NOT_THERE", "in_matrix"]) is False
+
+
+def test_genes_by_histotype_medians():
+    counts = pd.DataFrame(
+        {"S1": [100.0, 0], "S2": [300.0, 2], "S3": [10.0, 50], "S4": [30.0, 70]},
+        index=["SPEF2", "MUC2"],
+    )
+    metadata = pd.DataFrame({"histotype": ["Serous", "Serous", "Mucinous", "Mucinous"]},
+                            index=counts.columns)
+    dataset = data_loading.Dataset(
+        counts=counts, normalized=counts, log_expression=np.log2(counts + 1),
+        metadata=metadata, size_factors=pd.Series(1.0, index=counts.columns),
+    )
+    table = analyses.genes_by_histotype(dataset, ["SPEF2", "MUC2", "ABSENT"], ["Serous", "Mucinous"])
+    muc2 = table[(table.gene == "MUC2") & (table.histotype == "Mucinous")].iloc[0]
+    assert muc2["median_raw_counts"] == pytest.approx(60.0)
+    assert set(table["gene"]) == {"SPEF2", "MUC2"}

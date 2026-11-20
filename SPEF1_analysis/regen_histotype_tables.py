@@ -180,18 +180,28 @@ if not TMA_FILE.exists():
 tmaraw = pd.read_excel(TMA_FILE, header=None)
 t = tmaraw.iloc[11:].copy(); t.columns = list(tmaraw.iloc[10])
 t = t.dropna(subset=["Pathology diagnosis"]).reset_index(drop=True)
-def histo(x):
-    x = str(x).lower()
+def histo(row):
+    # Metastases first: "Metastatic clear cell carcinoma" also contains "clear cell",
+    # and in the submitted version that core ended up among the primary clear cell
+    # carcinomas. All 10 metastases (any site, any histology) form one group.
+    diagnosis = str(row["Pathology diagnosis"]).lower()
+    if str(row.get("Type", "")).strip().lower() == "metastasis" or "metasta" in diagnosis:
+        return "Metastases"
     for k, v in [("high grade serous", "HGSC"), ("low grade serous", "LGSC"), ("clear cell", "Clear cell"),
                  ("endometrioid", "Endometrioid"), ("mucinous", "Mucinous"),
-                 ("metasta", "LN metastasis"), ("normal", "Normal"), ("adjacent", "Normal")]:
-        if k in x: return v
-    return str(x)[:20]
-t["H"] = t["Pathology diagnosis"].map(histo)
+                 ("normal", "Normal"), ("adjacent", "Normal")]:
+        if k in diagnosis: return v
+    return diagnosis[:20]
+t["H"] = t.apply(histo, axis=1)
 t["S"] = t["SPEF1 expression"].astype(str).str.strip()
-t.loc[t.H == "Normal", "S"] = "-"          # all normal cores are negative
+t.loc[t.H == "Normal", "S"] = "-"          # the normal cores were all scored negative
+# a core with no tissue left on the slide is not evaluable and leaves the denominator
+t["evaluable"] = t["S"].str.lower() != "empty"
+print(f"\nTMA cores: {len(t)}, not evaluable: {int((~t.evaluable).sum())} "
+      f"({', '.join(t.loc[~t.evaluable, 'H'])})")
+t = t[t.evaluable].copy()
 t["pos"] = t["S"].isin(["+", "++", "+++"])
-TORD = ["HGSC", "LGSC", "Clear cell", "Endometrioid", "Mucinous", "LN metastasis", "Normal"]
+TORD = ["HGSC", "LGSC", "Clear cell", "Endometrioid", "Mucinous", "Metastases", "Normal"]
 rows = []
 for h in TORD:
     s = t[t.H == h]
@@ -204,12 +214,24 @@ for h in TORD:
     })
 tma = pd.DataFrame(rows); tma.to_csv(TAB / "tma_table.csv", index=False)
 print("\n=== TMA TABLE (semi-quantitative) ===\n", tma.to_string(index=False))
+met = t[t.H == "Metastases"]
+print("Metastases by site:", met["Organ/Anatomic Site"].value_counts().to_dict() if "Organ/Anatomic Site" in met else "n/a")
 
-# pairwise positivity (Fisher, BH) between histotypes in the TMA (carcinomas + normal as reference)
+# pairwise positivity (Fisher, BH over the 15 pairs of the five primary
+# histotypes plus normal ovary); metastases stay out of this family
 TMA_MAIN = ["HGSC", "LGSC", "Clear cell", "Endometrioid", "Mucinous", "Normal"]
 tt = t[t.H.isin(TMA_MAIN)]
 pwt = pairwise_positivity(TMA_MAIN, tt.H.values, tt.pos.values)
 pwt.to_csv(TAB / "tma_pairwise.csv", index=False)
+
+# metastases against all evaluable primary carcinomas, as a separate single test
+primary = t[t.H.isin(TMA_MAIN[:-1])]
+_, p_met = stats.fisher_exact([[int(met.pos.sum()), int((~met.pos).sum())],
+                               [int(primary.pos.sum()), int((~primary.pos).sum())]])
+met_note = (f"Metastases {int(met.pos.sum())}/{len(met)} vs primary carcinomas "
+            f"{int(primary.pos.sum())}/{len(primary)} positive, Fisher p = {p_met:.2f}")
+print(met_note)
+open(TAB / "tma_metastases_vs_primary.txt", "w", encoding="utf-8").write(met_note)
 sig_t = pwt[pwt.q < 0.05]
 note_t = ("; ".join(f"{r.group_1} vs {r.group_2}, p={r.p:.3f} (q={r.q:.3f})" for _, r in sig_t.iterrows())
           if len(sig_t) else "no pairwise comparison reached significance after Benjamini–Hochberg correction")

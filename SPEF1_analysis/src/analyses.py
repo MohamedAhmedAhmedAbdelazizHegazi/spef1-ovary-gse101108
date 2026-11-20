@@ -526,3 +526,113 @@ def immune_associations(
         signature_table["q_value_BH"] = benjamini_hochberg(signature_table["p_value"])
         signature_table["significant"] = signature_table["q_value_BH"] < 0.05
     return checkpoint_table, signature_table
+
+
+# --------------------------------------------------------------------------- #
+# Revision analyses (detection threshold, STRING interactors, histotype genes) #
+# --------------------------------------------------------------------------- #
+
+
+def threshold_rationale(
+    raw: pd.Series,
+    library_size: pd.Series,
+    reference_score: pd.Series,
+    thresholds: Sequence[int],
+) -> pd.DataFrame:
+    """What each detection threshold means for this cohort.
+
+    For every threshold I report the counts-per-million it corresponds to across
+    the libraries, the Poisson probability that a gene expected at one read per
+    library reaches it by sampling noise alone, and how well the resulting
+    positive/negative call separates the ciliated-programme score (AUC from the
+    Mann-Whitney U). A threshold that tracks biology should keep a high AUC.
+    """
+    from scipy import stats
+
+    cpm = {t: t / library_size.astype(float) * 1e6 for t in thresholds}
+    rows = []
+    for threshold in thresholds:
+        positive = raw >= threshold
+        pos = reference_score[positive].dropna()
+        neg = reference_score[~positive].dropna()
+        auc = p_auc = np.nan
+        if len(pos) and len(neg):
+            test = stats.mannwhitneyu(pos, neg, alternative="two-sided")
+            auc = float(test.statistic) / (len(pos) * len(neg))
+            p_auc = float(test.pvalue)
+        rows.append(
+            {
+                "threshold_counts": threshold,
+                "n_positive": int(positive.sum()),
+                "cpm_at_median_library": float(cpm[threshold].median()),
+                "cpm_min": float(cpm[threshold].min()),
+                "cpm_max": float(cpm[threshold].max()),
+                "poisson_p_ge_threshold_if_lambda1": float(stats.poisson.sf(threshold - 1, 1.0)),
+                "ciliated_score_auc": auc,
+                "ciliated_score_p": p_auc,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def interactor_coexpression(
+    coexpression: pd.DataFrame,
+    full_index: pd.Index,
+    interactors: Sequence[str],
+    alpha: float = 0.05,
+) -> pd.DataFrame:
+    """Transcriptome-wide co-expression of the STRING interactors of the target.
+
+    Values come from the transcriptome-wide table, so the q-values are those of
+    the whole co-expression analysis and an interactor that did not pass the
+    expression filter is flagged instead of being re-tested on its own.
+    """
+    rows = []
+    for gene in interactors:
+        symbol = resolve_symbols(coexpression.index, [gene])
+        in_matrix = resolve_symbols(full_index, [gene]) is not None
+        if symbol is None:
+            rows.append(
+                {"interactor": gene, "in_matrix": in_matrix, "passes_expression_filter": False,
+                 "rho": np.nan, "q_value_BH": np.nan, "significant": False}
+            )
+            continue
+        row = coexpression.loc[symbol]
+        rows.append(
+            {
+                "interactor": gene,
+                "in_matrix": True,
+                "passes_expression_filter": True,
+                "rho": float(row["rho"]),
+                "q_value_BH": float(row["q_value_BH"]),
+                "significant": bool(row["q_value_BH"] < alpha),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def genes_by_histotype(
+    dataset: Dataset, genes: Sequence[str], order: Sequence[str]
+) -> pd.DataFrame:
+    """Median raw counts and median log2 expression of a few genes per histotype."""
+    groups = dataset.metadata["histotype"].astype(str)
+    rows = []
+    for gene in genes:
+        symbol = resolve_symbols(dataset.counts.index, [gene])
+        if symbol is None:
+            LOGGER.warning("Gene di contesto %s assente dalla matrice", gene)
+            continue
+        for label in order:
+            samples = groups.index[groups == label]
+            if len(samples) == 0:
+                continue
+            rows.append(
+                {
+                    "gene": symbol,
+                    "histotype": label,
+                    "n": int(len(samples)),
+                    "median_raw_counts": float(dataset.counts.loc[symbol, samples].median()),
+                    "median_log2": float(dataset.log_expression.loc[symbol, samples].median()),
+                }
+            )
+    return pd.DataFrame(rows)

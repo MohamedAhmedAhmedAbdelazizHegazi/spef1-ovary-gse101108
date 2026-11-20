@@ -147,7 +147,9 @@ def build_manuscript_numbers(results: Mapping[str, Any]) -> dict[str, Any]:
         "stage": profile.stage.to_dict("records"),
         "age": profile.age,
         "library_size_check": profile.library_size_check,
+        "detection_threshold_rationale": results["threshold_rationale"],
         "coexpression": results["coexpression_summary"],
+        "string_interactors": results["string_interactors"],
         "panels": results["panel_summary"],
         "differential": results["differential_summary"],
         "enrichment": results["enrichment_summary"],
@@ -185,14 +187,37 @@ def summary_lines(numbers: Mapping[str, Any]) -> list[str]:
         f"Controllo library size: rho = {numbers['library_size_check']['rho']:.3f} "
         f"(p = {numbers['library_size_check']['p_value']:.3f})",
         "",
+        "SOGLIA DI RILEVABILITA'",
+    ]
+    for row in numbers["detection_threshold_rationale"]:
+        lines.append(
+            f"  >= {row['threshold_counts']:>2} read: {row['n_positive']:>2} positivi, "
+            f"{row['cpm_at_median_library']:.2f} CPM alla library mediana "
+            f"({row['cpm_min']:.2f}-{row['cpm_max']:.2f}), "
+            f"P(Poisson, lambda=1) = {row['poisson_p_ge_threshold_if_lambda1']:.4f}, "
+            f"AUC score ciliare = {row['ciliated_score_auc']:.2f}"
+        )
+    coexpression = numbers["coexpression"]
+    interactors = numbers["string_interactors"]
+    differential = numbers["differential"]
+    lines += [
+        "",
         "CO-ESPRESSIONE",
-        f"  geni testati: {numbers['coexpression']['n_tested']}",
-        f"  significativi (q<0.05): {numbers['coexpression']['n_significant']}",
-        f"  con rho >= soglia: {numbers['coexpression']['n_above_rho']}",
+        f"  geni testati: {coexpression['n_tested']}",
+        f"  significativi (q<0.05): {coexpression['n_significant']} "
+        f"({coexpression['n_significant_positive']} positivi, "
+        f"{coexpression['n_significant_negative']} negativi)",
+        f"  modulo (q<0.05 e rho >= soglia): {coexpression['n_above_rho']} "
+        f"(testati nella GO: {coexpression['module_genes_tested_in_go']})",
+        f"  interattori STRING: {interactors['n_pass_expression_filter']}/"
+        f"{interactors['n_interactors']} sopra il filtro, {interactors['n_significant']} "
+        f"co-espressi ({', '.join(interactors['significant'])})",
         "",
         "ESPRESSIONE DIFFERENZIALE",
-        f"  {numbers['differential']['comparison']}: "
-        f"{numbers['differential']['n_significant']} geni con q<0.05",
+        f"  {differential['comparison']}: {differential['n_significant']} geni con q<0.05; "
+        f"{differential['n_deg']} DEG con |log2FC| >= 1 "
+        f"({differential['n_up']} up, {differential['n_down']} down)",
+        f"  split alla mediana: {differential['sensitivity_median_split_n_significant']} geni con q<0.05",
         "",
         "ARRICCHIMENTO GO",
     ]

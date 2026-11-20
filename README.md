@@ -5,17 +5,19 @@ Code for the transcriptomic (dataset) results of the study
 
 ## About the study
 
-SPEF1 (sperm flagellar 1) is an axonemal, calponin-homology actin-bundling protein
-of motile cilia, and a member of the cancer–testis-like group of antigens whose
-expression is normally restricted to the testis but re-emerges in tumours. The
-paper characterizes SPEF1 in primary ovarian carcinoma by combining three
+SPEF1 (sperm flagellar 1) is a calponin-homology, microtubule-binding protein of
+motile cilia and flagella. It is enriched in testis but also in other tissues
+bearing motile cilia, such as the fallopian tube, and, unlike its homologue SPEF2,
+it is not catalogued in the CT database; the paper therefore treats it as a marker
+of ciliated-lineage differentiation rather than as a classical cancer–testis
+antigen. SPEF1 is characterized in primary ovarian carcinoma by combining three
 complementary lines of evidence:
 
-- **Immunohistochemistry** on a tissue microarray of ovarian carcinomas, lymph-node
+- **Immunohistochemistry** on a tissue microarray of primary ovarian carcinomas,
   metastases and normal ovary, scored semi-quantitatively.
 - **Bioinformatic analysis** of the SPEF1 protein–protein interaction network and
-  its functional (Gene Ontology) enrichment (STRING), and of prognostic value
-  (KM-plotter).
+  its functional (Gene Ontology) enrichment (STRING), and exploratory, univariate
+  survival associations (KM-plotter).
 - **Independent validation** in a histotype-annotated RNA-sequencing cohort,
   **GSE101108** (94 early-stage primary invasive ovarian carcinomas spanning all
   major histotypes), which is what this repository processes.
@@ -26,21 +28,26 @@ are recreated locally.
 
 ## Highlights
 
-- SPEF1 protein is **absent from normal ovary** but expressed across ovarian
-  carcinoma histotypes on the tissue microarray (low-grade serous 87.5%, mucinous
-  70%, clear cell 66.7%, high-grade serous 51.9%, endometrioid 33.3%); every
-  carcinoma histotype except endometrioid is significantly positive relative to
-  normal ovary (Fisher exact, BH-corrected).
-- Its interaction network and co-expression module converge on **motile-cilium /
-  axoneme** biology — SPEF1 marks a ciliary transcriptional programme.
+- SPEF1 protein is **absent from normal ovary** but expressed in primary ovarian
+  carcinomas on the tissue microarray (low-grade serous 7/8, mucinous 7/10, clear
+  cell 3/5, high-grade serous 28/53, endometrioid 1/3); positivity is significantly
+  higher than in normal ovary for the high-grade serous, low-grade serous and
+  mucinous histotypes (Fisher exact, BH-corrected), while the clear cell and
+  endometrioid groups are too small for a conclusive comparison. Metastases,
+  analysed as a separate group, are positive in 6/10.
 - In the independent GSE101108 cohort, SPEF1 mRNA is detected in **33% of
-  carcinomas** and is **virtually absent in the mucinous histotype** (Kruskal–Wallis
-  p = 0.033), independent of FIGO stage and age.
-- SPEF1 expression is **inversely related to immune infiltration** (lower immune-cell
-  marker scores and lower CD274, PDCD1LG2 and HAVCR2), i.e. ciliated, well-
-  differentiated tumour areas are comparatively immune-poor.
-- In public survival data, **high SPEF1** associates with **better overall,
-  progression-free and post-progression survival**.
+  carcinomas** and is **virtually absent in the mucinous histotype**, with no
+  significant association with FIGO stage or age.
+- The 304-gene SPEF1 co-expression module is dominated by **motile-cilium /
+  axoneme** genes — SPEF1 marks a ciliary transcriptional programme. The STRING
+  network provides biological context for this, not independent validation.
+- SPEF1 is inversely correlated with **CD274, PDCD1LG2 and HAVCR2**; its inverse
+  correlations with marker-based immune-cell signatures are weak and do not survive
+  multiple-testing correction, i.e. **lower immune-related transcriptional
+  signatures**, not a measured difference in infiltration.
+- Survival associations from KM-plotter are **exploratory, univariate and
+  heterogeneous** across datasets and subgroups (17 of 68 subgroup estimates
+  survive BH correction).
 
 ## Selected results
 
@@ -68,8 +75,10 @@ are recreated locally.
 | Fig. 5 — unsupervised clustering heatmap (SPEF1 + 20 co-expressed genes) | `SPEF1_analysis/regen_coexpression_figures.py` |
 | Fig. 6 — differential expression (volcano) | `SPEF1_analysis/main.py` |
 | Fig. 7 — GO enrichment of the co-expression module (STRING style) | `SPEF1_analysis/regen_dataset_go.py` |
-| Fig. 8 — association with the immune microenvironment | `SPEF1_analysis/main.py` |
+| Fig. 8 — association with immune-related transcriptional signatures | `SPEF1_analysis/main.py` |
 | Table 3 — SPEF1 detection by histotype, Table 4 — top GO terms, results workbook | `SPEF1_analysis/main.py` |
+| Detection-threshold rationale, co-expression of the 20 STRING interactors of Table 1, SPEF2/MUC2/CDX2 by histotype | `SPEF1_analysis/main.py` |
+| Table 5 — Benjamini–Hochberg correction of the KM-plotter subgroup estimates (†) | `SPEF1_analysis/kmplotter_multiplicity.py` |
 
 Not generated by this code:
 
@@ -77,8 +86,38 @@ Not generated by this code:
   and its GO enrichment were exported directly from the string-db.org web interface
   (SPEF1-centered query, *Homo sapiens*), and Table 1 lists the node degrees of that
   network.
-- **Figs 9–10** are representative immunohistochemistry images, and **Table 5** comes
-  from the external KM-plotter web tool.
+- **Figs 9–10** are representative immunohistochemistry images. The hazard ratios
+  of **Table 5** come from the external KM-plotter web tool (probe 216119_s_at,
+  median split); they are stored as reported in
+  `SPEF1_analysis/external/kmplotter_table5.csv`, and only their multiple-testing
+  correction is computed here.
+
+## Changes after peer review
+
+The repository was updated to match the revised, accepted manuscript:
+
+- **Tissue microarray (Table 6).** Metastases are now one separate group of 10
+  (lymph node 7, pelvic cavity 2, greater omentum 1; 9 serous, 1 clear cell)
+  instead of 9 "lymph-node metastases": the metastatic clear cell carcinoma had
+  been matched by the keyword "clear cell" and pooled with the primary clear cell
+  carcinomas. The high-grade serous core without tissue is excluded (n = 53). The
+  BH family is the 15 pairwise comparisons of the five primary histotypes and
+  normal ovary; metastases are compared with all primary carcinomas separately.
+- **Detection threshold.** `threshold_rationale` reports, for 1, 3, 5 and 10 reads,
+  the counts per million across libraries, the Poisson probability of reaching the
+  threshold by sampling noise, and the AUC of the ciliated-programme score between
+  positive and negative tumours (0.82–0.94 at every threshold).
+- **STRING interactors.** Co-expression is now reported for the 20 interactors of
+  Table 1 (13 pass the expression filter, 6 are co-expressed at q < 0.05), using the
+  transcriptome-wide q-values; the earlier 11-gene GeneMANIA list was removed.
+- **Reported counts.** The numbers file separates the 1,056 genes correlated with
+  SPEF1 (667 positive, 389 negative) from the 304-gene co-expression module (300
+  tested in GO), and the 472 genes at q < 0.05 from the 266 differentially expressed
+  genes (|log2FC| ≥ 1; 243 up, 23 down). Nominal p and BH q are written for every
+  immune signature and checkpoint gene.
+- **Table 5.** Post hoc BH correction across the 68 KM-plotter subgroup estimates;
+  the stage I+II OS hazard ratio reads 0.42 (95% CI 0.20–0.89), as corrected in the
+  revision.
 
 ## Repository layout — two stages
 
@@ -133,6 +172,7 @@ python SPEF1_analysis/main.py                      # core analysis + volcano/imm
 python SPEF1_analysis/regen_histotype_tables.py    # Fig 3 + Table 2 (+ Table 6 if TMA present)
 python SPEF1_analysis/regen_coexpression_figures.py  # Fig 4 correlation matrix + Fig 5 heatmap
 python SPEF1_analysis/regen_dataset_go.py          # Fig 7 dataset GO (STRING style)
+python SPEF1_analysis/kmplotter_multiplicity.py    # Table 5 BH correction (no download needed)
 ```
 
 Outputs are written under `SPEF1_analysis/results/` (figures as 300-dpi PNG and
@@ -148,6 +188,11 @@ LZW-compressed TIFF; tables as CSV and multi-sheet Excel).
   data and are *not* included. To regenerate Table 6, place the Excel file at
   `data/TMA_SPEF1_expression.xlsx`; without it, `regen_histotype_tables.py` still
   writes Fig 3 and Table 2 and simply skips Table 6.
+- **Immune signatures** are marker-based scores: each marker's log2(median-of-ratios
+  + 1) value is z-scored across the 94 tumours and the markers are averaged. No
+  background correction is applied (it has no counterpart for read counts), and they
+  are not a deconvolution of the infiltrate. MRC1 and PIFO are not retrieved in the
+  annotated matrix; the `firme_composizione` sheet lists the markers actually used.
 
 ## Reproducibility
 

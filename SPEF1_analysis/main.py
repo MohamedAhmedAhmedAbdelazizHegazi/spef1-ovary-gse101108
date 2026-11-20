@@ -163,8 +163,8 @@ def run(args: argparse.Namespace) -> int:
                 "GEPIA2 top-10 (TCGA)",
             ),
             analyses.panel_correlations(
-                dataset, log_values, config_module.MANUSCRIPT_INTERACTOME,
-                "GeneMANIA interactome",
+                dataset, log_values, config_module.STRING_INTERACTORS,
+                "STRING interactors (Table 1)",
             ),
             analyses.panel_correlations(
                 dataset, log_values, config_module.CANCER_TESTIS_ANTIGENS,
@@ -202,6 +202,19 @@ def run(args: argparse.Namespace) -> int:
     stratified_features["Macrophages (score)"] = scores["Macrophages"]
     stratified = analyses.stratified_correlations(
         dataset, log_values, stratified_features, config_module.HISTOTYPE_ORDER
+    )
+
+    # what the 5-read threshold means here, and whether the call tracks the
+    # ciliated programme at every cut-off (reviewer request, round 1)
+    rationale = analyses.threshold_rationale(
+        raw, dataset.metadata["library_size"], scores["Ciliated cell program"],
+        config_module.DETECTION_THRESHOLDS_SENSITIVITY,
+    )
+    interactors = analyses.interactor_coexpression(
+        coexpression, dataset.counts.index, config_module.STRING_INTERACTORS, cfg.fdr_alpha
+    )
+    context_genes = analyses.genes_by_histotype(
+        dataset, config_module.HISTOTYPE_CONTEXT_GENES, config_module.HISTOTYPE_ORDER
     )
 
     # ----------------------------------------------------------- arricchimento #
@@ -297,7 +310,7 @@ def run(args: argparse.Namespace) -> int:
     results = _collect_results(
         cfg, dataset, expressed, profile, coexpression, panels, differential,
         differential_median, checkpoints, signature_stats, enrichment_summary,
-        stratified,
+        stratified, rationale, interactors,
     )
     numbers = reporting.build_manuscript_numbers(results)
 
@@ -305,6 +318,9 @@ def run(args: argparse.Namespace) -> int:
         {
             "detection": profile.detection_summary,
             "detection_sensibilita": profile.detection_sensitivity,
+            "soglia_razionale": rationale,
+            "interattori_STRING": interactors,
+            "geni_contesto_istotipo": context_genes,
             "detection_confronti": profile.detection_pairwise,
             "espressione": profile.expression_summary,
             "espressione_confronti": profile.expression_pairwise,
@@ -363,10 +379,13 @@ def _collect_results(
     signature_stats: pd.DataFrame,
     enrichment_summary: dict[str, Any],
     stratified: pd.DataFrame,
+    rationale: pd.DataFrame,
+    interactors: pd.DataFrame,
 ) -> dict[str, Any]:
     """Collect the results into a dictionary for the report."""
     library = dataset.metadata["library_size"]
     significant_signatures = signature_stats[signature_stats["significant"].fillna(False)]
+    sig_coexpression = coexpression["q_value_BH"] < cfg.fdr_alpha
     return {
         "gse_id": cfg.gse_id,
         "n_samples": dataset.n_samples,
@@ -378,12 +397,26 @@ def _collect_results(
         "profile": profile,
         "coexpression_summary": {
             "n_tested": int(len(coexpression)),
-            "n_significant": int((coexpression["q_value_BH"] < cfg.fdr_alpha).sum()),
-            "n_above_rho": int(
-                ((coexpression["q_value_BH"] < cfg.fdr_alpha)
-                 & (coexpression["rho"] >= cfg.coexpression_rho)).sum()
-            ),
+            "n_significant": int(sig_coexpression.sum()),
+            "n_significant_positive": int((sig_coexpression & (coexpression["rho"] > 0)).sum()),
+            "n_significant_negative": int((sig_coexpression & (coexpression["rho"] < 0)).sum()),
+            # the co-expression module: q < alpha and rho >= threshold
+            "n_above_rho": int((sig_coexpression & (coexpression["rho"] >= cfg.coexpression_rho)).sum()),
+            "module_genes_tested_in_go": int(min(
+                (sig_coexpression & (coexpression["rho"] >= cfg.coexpression_rho)).sum(),
+                cfg.coexpression_top_n,
+            )),
             "top_genes": coexpression.head(20).reset_index().to_dict("records"),
+        },
+        "threshold_rationale": rationale.to_dict("records"),
+        "string_interactors": {
+            "n_interactors": int(len(interactors)),
+            "n_pass_expression_filter": int(interactors["passes_expression_filter"].sum()),
+            "n_significant": int(interactors["significant"].sum()),
+            "significant": interactors.loc[interactors["significant"], "interactor"].tolist(),
+            "below_filter": interactors.loc[
+                ~interactors["passes_expression_filter"], "interactor"
+            ].tolist(),
         },
         "panel_summary": {
             panel: {
@@ -408,6 +441,11 @@ def _collect_results(
             "n_down": int(((differential["q_value_BH"] < cfg.fdr_alpha)
                            & (differential["log2FC"] <= -cfg.de_log2fc)).sum())
             if not differential.empty else 0,
+            # differentially expressed genes = q < alpha AND |log2FC| >= threshold,
+            # the definition used in the volcano plot (Figure 6)
+            "n_deg": int(((differential["q_value_BH"] < cfg.fdr_alpha)
+                          & (differential["log2FC"].abs() >= cfg.de_log2fc)).sum())
+            if not differential.empty else 0,
             "top_genes": differential.head(20).reset_index().to_dict("records")
             if not differential.empty else [],
             "sensitivity_median_split_n_significant": int(
@@ -428,6 +466,15 @@ def _collect_results(
             "firme_rho": {
                 row["signature"]: round(float(row["rho"]), 3)
                 for _, row in signature_stats.iterrows()
+            },
+            # nominal p and BH q (family = the signatures) for every signature
+            "firme_p_q": {
+                row["signature"]: [float(row["p_value"]), float(row["q_value_BH"])]
+                for _, row in signature_stats.iterrows()
+            },
+            "checkpoint_q": {
+                row["published_symbol"]: float(row["q_value_BH"])
+                for _, row in checkpoints[checkpoints["found"]].iterrows()
             },
         },
     }

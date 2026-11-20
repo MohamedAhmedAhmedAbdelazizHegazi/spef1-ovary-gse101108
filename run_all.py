@@ -23,6 +23,8 @@ Run from the repository root::
 
 The STRING network and enrichment figures (manuscript Figs 1-2) are not produced
 here: they were exported directly from the string-db.org web interface (see README).
+The KM-plotter estimates of Table 5 are read from SPEF1_analysis/external/ and only
+their multiple-testing correction is computed here.
 """
 
 from __future__ import annotations
@@ -68,6 +70,7 @@ def main() -> int:
     run(["regen_histotype_tables.py"], ANALYSIS)    # Fig 3 + Table 2 (+ Table 6 if TMA present)
     run(["regen_coexpression_figures.py"], ANALYSIS)  # Fig 4 correlation matrix + Fig 5 heatmap
     run(["regen_dataset_go.py"], ANALYSIS)          # Fig 7 dataset GO (STRING style)
+    run(["kmplotter_multiplicity.py"], ANALYSIS)    # Table 5: BH across the KM-plotter subgroups
 
     print("\nAll stages completed. Figures and tables are under SPEF1_analysis/results/.")
     return 0
